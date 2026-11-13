@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>ScreenLink — Comparte tu pantalla con un código</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='6' y='10' width='40' height='28' rx='4' fill='%233dd68c'/><rect x='38' y='24' width='20' height='32' rx='4' fill='%23fff'/></svg>">
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#141821; --panel2:#1b2030; --line:#262c3d;
+    --text:#e8ebf2; --muted:#8a93a8; --accent:#3dd68c; --accent2:#2bb673; --danger:#ff5d6c;
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+  body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  button,input,select{font:inherit;color:inherit}
+  .hidden{display:none!important}
+  header{display:flex;align-items:center;gap:10px;padding:18px 22px}
+  header .logo{width:30px;height:30px}
+  header b{font-size:18px;letter-spacing:.2px}
+  header span{color:var(--muted);font-size:13px;margin-left:auto}
+  main{max-width:980px;margin:0 auto;padding:10px 18px 40px}
+  h1{font-size:clamp(24px,4vw,34px);margin:10px 0 6px}
+  .sub{color:var(--muted);margin:0 0 26px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+  .card h2{margin:0 0 6px;font-size:19px;display:flex;align-items:center;gap:10px}
+  .card p{color:var(--muted);margin:0 0 18px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);flex:1;min-width:120px}
+  select,input[type=text]{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 12px;outline:none}
+  select:focus,input:focus{border-color:var(--accent)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;
+    padding:13px 18px;font-weight:600;cursor:pointer;background:var(--panel2);border:1px solid var(--line);transition:.15s}
+  .btn:hover{filter:brightness(1.15)}
+  .btn:disabled{opacity:.45;cursor:not-allowed;filter:none}
+  .btn.primary{background:var(--accent);color:#06210f;border-color:transparent}
+  .btn.danger{background:transparent;color:var(--danger);border-color:#4a2530}
+  .btn.block{width:100%}
+  .codein{font-size:30px!important;letter-spacing:12px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;width:100%;padding:14px!important}
+  .note{font-size:13px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:14px}
+  .note.warn{border-color:#5a4520;color:#f3c76b}
+
+  /* host */
+  .hostwrap{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:18px}
+  @media (max-width:760px){.hostwrap{grid-template-columns:1fr}}
+  .code{font-size:52px;font-weight:800;letter-spacing:10px;text-align:center;font-variant-numeric:tabular-nums;margin:6px 0 4px;color:var(--accent)}
+  .qr{background:#fff;border-radius:12px;padding:10px;width:200px;height:200px;margin:12px auto;display:flex;align-items:center;justify-content:center}
+  .qr svg{width:100%;height:100%}
+  .linkrow{display:flex;gap:8px}
+  .linkrow input{flex:1;min-width:0;font-size:13px}
+  .preview{width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;object-fit:contain;border:1px solid var(--line)}
+  .viewers{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .viewers li{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:14px}
+  .viewers li .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .viewers li.conn .dot{background:#f3c76b}
+  .viewers li button{margin-left:auto;padding:6px 10px;font-size:12px}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+  .pill.on .dot{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+
+  /* viewer */
+  #viewer{position:fixed;inset:0;background:#000;z-index:10}
+  #remote{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+  .bar{position:absolute;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:8px;
+    background:rgba(20,24,33,.85);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:14px;padding:8px;transition:opacity .3s;z-index:3}
+  .bar .btn{padding:10px 14px}
+  .stats{position:absolute;top:calc(12px + env(safe-area-inset-top));left:12px;font:12px/1.4 ui-monospace,Consolas,monospace;background:rgba(0,0,0,.55);
+    padding:6px 10px;border-radius:8px;color:#cfe;transition:opacity .3s;z-index:3;white-space:pre}
+  .waiting{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--muted);z-index:2;text-align:center;padding:20px}
+  .spinner{width:38px;height:38px;border-radius:50%;border:3px solid #333;border-top-color:var(--accent);animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .idle .bar,.idle .stats{opacity:0;pointer-events:none}
+  .idle{cursor:none}
+
+  #toast{position:fixed;left:50%;top:20px;transform:translateX(-50%) translateY(-120%);background:var(--panel2);border:1px solid var(--line);
+    padding:12px 18px;border-radius:12px;z-index:99;transition:.25s;max-width:90vw;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+  #toast.show{transform:translateX(-50%) translateY(0)}
+  #toast.err{border-color:#5a2530;color:#ffb3bb}
+  footer{color:var(--muted);font-size:12px;text-align:center;padding:20px}
+</style>
+</head>
+<body>
+<header>
+  <svg class="logo" viewBox="0 0 64 64"><rect x="6" y="10" width="40" height="28" rx="4" fill="#3dd68c"/><rect x="38" y="24" width="20" height="32" rx="4" fill="#fff"/><rect x="44" y="50" width="8" height="2" rx="1" fill="#0b0d12"/></svg>
+  <b>ScreenLink</b>
+  <span id="netstate" class="pill"><i class="dot"></i><em>Conectando…</em></span>
+</header>
+
+<!-- ============ INICIO ============ -->
+<main id="home">
+  <h1>Comparte tu pantalla con un código</h1>
+  <p class="sub">PC ↔ móvil, desde cualquier red. El vídeo viaja directo entre los dispositivos (P2P, cifrado).</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>🖥️ Compartir pantalla</h2>
+      <p>Genera un código y compártelo con el otro dispositivo.</p>
+      <div class="row">
+        <label class="f">Modo
+          <select id="mode">
+            <option value="motion">Fluido (60 fps)</option>
+            <option value="balanced" selected>Equilibrado (30–60 fps)</option>
+            <option value="detail">Nitidez (texto)</option>
+          </select>
+        </label>
+        <label class="f">Resolución
+          <select id="res">
+            <option value="720">720p</option>
+            <option value="1080" selected>1080p</option>
+            <option value="1440">1440p</option>
+            <option value="0">Nativa</option>
+          </select>
+        </label>
+      </div>
+      <button id="btnShare" class="btn primary block">Empezar a compartir</button>
+      <div id="noCapture" class="note warn hidden">Este navegador no permite capturar la pantalla (los navegadores de móvil no lo soportan). Úsalo para <b>ver</b> la pantalla de un PC.</div>
+    </section>
+
+    <section class="card">
+      <h2>📱 Ver pantalla</h2>
+      <p>Introduce el código de 6 cifras que aparece en el otro dispositivo.</p>
+      <input id="codeIn" class="codein" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="······">
+      <div style="height:14px"></div>
+      <button id="btnJoin" class="btn primary block" disabled>Conectar</button>
+      <div class="note">Consejo: también puedes escanear el QR que aparece en el emisor.</div>
+    </section>
+  </div>
+</main>
+
+<!-- ============ EMISOR ============ -->
+<main id="host" class="hidden">
+  <div class="hostwrap">
+    <section class="card">
+      <h2>Tu código <span id="hostState" class="pill" style="margin-left:auto"><i class="dot"></i><em>Esperando</em></span></h2>
+      <div id="codeOut" class="code">······</div>
+      <div id="qr" class="qr"></div>
+      <div class="linkrow">
+        <input id="linkOut" type="text" readonly>
+        <button id="btnCopy" class="btn">Copiar</button>
+      </div>
+      <div style="height:14px"></div>
+      <button id="btnStop" class="btn danger block">Dejar de compartir</button>
+    </section>
+    <section class="card">
+      <h2>Vista previa</h2>
+      <video id="preview" class="preview" autoplay muted playsinline></video>
+      <h2 style="margin-top:18px;font-size:16px">Espectadores <span id="vcount" class="pill">0</span></h2>
+      <ul id="viewers" class="viewers"></ul>
+      <p id="noViewers" style="margin:10px 0 0">Nadie conectado todavía.</p>
+    </section>
+  </div>
+</main>
+
+<!-- ============ ESPECTADOR ============ -->
+<div id="viewer" class="hidden">
+  <video id="remote" autoplay playsinline muted></video>
+  <div id="waiting" class="waiting"><div class="spinner"></div><div id="waitText">Conectando…</div></div>
+  <div id="stats" class="stats hidden"></div>
+  <div class="bar">
+    <button id="btnAudio" class="btn" title="Sonido">🔇</button>
+    <button id="btnStats" class="btn" title="Estadísticas">📊</button>
+    <button id="btnFs" class="btn" title="Pantalla completa">⛶</button>
+    <button id="btnLeave" class="btn danger">Salir</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<footer id="foot">ScreenLink · WebRTC P2P</footer>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>
+/* ==========================================================================
+   CONFIGURACIÓN
+   - Señalización: servidor público gratuito de PeerJS (0.peerjs.com).
+     Para usar uno propio: npx peer --port 9000  y rellena PEER_SERVER.
+   - TURN: necesario cuando alguno de los dos está detrás de un NAT estricto
+     (algunas redes 4G/5G, redes corporativas). Rellena TURN con tu coturn.
+   ========================================================================== */
+const PEER_SERVER = null; // ej: { host: 'peer.blockhost.es', port: 443, path: '/', secure: true }
+const TURN = [
+  // { urls: ['turn:turn.blockhost.es:3478?transport=udp','turn:turn.blockhost.es:3478?transport=tcp','turns:turn.blockhost.es:5349'], username: 'user', credential: 'pass' },
+];
+const ID_PREFIX = 'screenlink-v1-';
+
+const ICE = {
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+    ...TURN,
+  ],
+  sdpSemantics: 'unified-plan',
+};
+
+/* ========================================================================== */
+const $ = s => document.querySelector(s);
+const show = (el, v = true) => el.classList.toggle('hidden', !v);
+let toastT;
+function toast(msg, err = false) {
+  const t = $('#toast'); t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = '', 3800);
+}
+function netState(text, on) {
+  const p = $('#netstate'); p.classList.toggle('on', !!on); p.querySelector('em').textContent = text;
+}
+function peerOpts(extra = {}) {
+  return Object.assign({ config: ICE, debug: 1 }, PEER_SERVER || {}, extra);
+}
+
+const canCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+if (!canCapture) { $('#btnShare').disabled = true; show($('#noCapture')); }
+if (!window.Peer) toast('No se pudo cargar PeerJS. Revisa tu conexión.', true);
+else netState('Listo', true);
+
+/* -------------------------- INICIO -------------------------- */
+const codeIn = $('#codeIn');
+codeIn.addEventListener('input', () => {
+  codeIn.value = codeIn.value.replace(/\D/g, '').slice(0, 6);
+  $('#btnJoin').disabled = codeIn.value.length !== 6;
+  if (codeIn.value.length === 6) $('#btnJoin').focus();
+});
+codeIn.addEventListener('keydown', e => { if (e.key === 'Enter' && codeIn.value.length === 6) startViewer(codeIn.value); });
+$('#btnJoin').onclick = () => startViewer(codeIn.value);
+$('#btnShare').onclick = startHost;
+
+/* ========================== EMISOR ========================== */
+let hostPeer = null, stream = null, hostCode = null;
+const calls = new Map(); // peerId -> { call, conn, li, name }
+
+const PROFILES = {
+  motion:   { fps: 60, hint: 'motion', degr: 'maintain-framerate', mult: 1.4 },
+  balanced: { fps: 60, hint: 'motion', degr: 'balanced',           mult: 1.0 },
+  detail:   { fps: 30, hint: 'detail', degr: 'maintain-resolution', mult: 1.0 },
+};
+
+function bitrateFor(h, fps) {
+  const base = { 720: 4e6, 1080: 8e6, 1440: 14e6, 0: 12e6 }[h] ?? 8e6;
+  return Math.round(base * (fps >= 60 ? 1.3 : 1));
+}
+
+async function startHost() {
+  const prof = PROFILES[$('#mode').value];
+  const h = +$('#res').value;
+  const video = { frameRate: { ideal: prof.fps, max: prof.fps }, cursor: 'always' };
+  if (h) { video.height = { ideal: h, max: h }; video.width = { ideal: Math.round(h * 16 / 9), max: Math.round(h * 16 / 9) }; }
+
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video,
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      selfBrowserSurface: 'exclude',
+      systemAudio: 'include',
+      surfaceSwitching: 'include',
+    });
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') toast('No se pudo capturar la pantalla: ' + e.message, true);
+    return;
+  }
+
+  const vt = stream.getVideoTracks()[0];
+  try { vt.contentHint = prof.hint; } catch {}
+  vt.addEventListener('ended', stopHost);
+  stream.__prof = prof;
+  stream.__bitrate = Math.round(bitrateFor(h, prof.fps) * prof.mult);
+
+  $('#preview').srcObject = stream;
+  show($('#home'), false); show($('#host'));
+  $('#codeOut').textContent = '······';
+  setHostState('Registrando…', false);
+  createHostPeer(0);
+}
+
+function randomCode() {
+  const a = new Uint32Array(1); crypto.getRandomValues(a);
+  return String(a[0] % 1000000).padStart(6, '0');
+}
+
+function createHostPeer(attempt) {
+  if (!stream) return;
+  const code = randomCode();
+  const peer = new Peer(ID_PREFIX + code, peerOpts());
+  hostPeer = peer;
+
+  peer.on('open', () => {
+    hostCode = code;
+    $('#codeOut').textContent = code;
+    const url = location.origin + location.pathname + '?c=' + code;
+    $('#linkOut').value = url;
+    renderQR(url);
+    setHostState('Esperando', true);
+    netState('Conectado', true);
+  });
+
+  peer.on('connection', conn => {
+    conn.on('open', () => {
+      const name = (conn.metadata && conn.metadata.name) || 'Dispositivo';
+      callViewer(conn, name);
+    });
+    conn.on('close', () => dropViewer(conn.peer));
+  });
+
+  peer.on('disconnected', () => {
+    netState('Reconectando…', false);
+    // Las llamadas en curso siguen vivas; sólo perdemos la señalización.
+    setTimeout(() => { if (hostPeer === peer && !peer.destroyed) peer.reconnect(); }, 1500);
+  });
+
+  peer.on('error', err => {
+    if (err.type === 'unavailable-id' && attempt < 5) { peer.destroy(); return createHostPeer(attempt + 1); }
+    if (err.type === 'peer-unavailable') return;
+    console.warn('peer error', err.type, err);
+    if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) {
+      netState('Sin señalización', false);
+    } else toast('Error: ' + (err.message || err.type), true);
+  });
+}
+
+function callViewer(conn, name) {
+  const id = conn.peer;
+  if (calls.has(id)) return;
+  const call = hostPeer.call(id, stream, { metadata: { kind: 'screen' } });
+  const li = document.createElement('li'); li.className = 'conn';
+  li.innerHTML = '<i class="dot"></i><span></span><button class="btn danger">Expulsar</button>';
+  li.querySelector('span').textContent = name + ' · conectando…';
+  li.querySelector('button').onclick = () => { try { conn.send({ t: 'kick' }); } catch {} setTimeout(() => dropViewer(id), 200); };
+  $('#viewers').appendChild(li);
+  calls.set(id, { call, conn, li, name });
+  updateViewers();
+
+  const pc = call.peerConnection;
+  const onState = () => {
+    const s = pc.connectionState || pc.iceConnectionState;
+    if (s === 'connected' || s === 'completed') {
+      li.className = ''; li.querySelector('span').textContent = name + ' · conectado';
+      tuneSenders(pc);
+      describeRoute(pc).then(r => { if (r) li.querySelector('span').textContent = name + ' · ' + r; });
+    } else if (s === 'failed') {
+      li.querySelector('span').textContent = name + ' · falló (¿falta TURN?)';
+      setTimeout(() => dropViewer(id), 4000);
+    } else if (s === 'disconnected') {
+      li.className = 'conn'; li.querySelector('span').textContent = name + ' · reconectando…';
+    }
+  };
+  pc.addEventListener('connectionstatechange', onState);
+  pc.addEventListener('iceconnectionstatechange', onState);
+  call.on('close', () => dropViewer(id));
+  call.on('error', () => dropViewer(id));
+}
+
+async function tuneSenders(pc) {
+  const prof = stream.__prof;
+  for (const s of pc.getSenders()) {
+    if (!s.track || s.track.kind !== 'video') continue;
+    try {
+      const p = s.getParameters();
+      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+      p.encodings[0].maxBitrate = stream.__bitrate;
+      p.encodings[0].maxFramerate = prof.fps;
+      p.encodings[0].priority = 'high';
+      p.encodings[0].networkPriority = 'high';
+      p.degradationPreference = prof.degr;
+      await s.setParameters(p);
+    } catch (e) { console.warn('setParameters', e); }
+  }
+}
+
+async function describeRoute(pc) {
+  try {
+    const stats = await pc.getStats();
+    let pair, local;
+    stats.forEach(r => { if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') pair = r; });
+    if (!pair) return null;
+    stats.forEach(r => { if (r.id === pair.localCandidateId) local = r; });
+    return local && local.candidateType === 'relay' ? 'conectado (vía TURN)' : 'conectado (directo P2P)';
+  } catch { return null; }
+}
+
+function dropViewer(id) {
+  const v = calls.get(id); if (!v) return;
+  calls.delete(id);
+  try { v.call.close(); } catch {}
+  try { v.conn.close(); } catch {}
+  v.li.remove();
+  updateViewers();
+}
+
+function updateViewers() {
+  const n = calls.size;
+  $('#vcount').textContent = n;
+  show($('#noViewers'), n === 0);
+  setHostState(n ? 'Compartiendo' : 'Esperando', true);
+}
+
+function setHostState(text, on) {
+  const p = $('#hostState'); p.classList.toggle('on', on && text === 'Compartiendo'); p.querySelector('em').textContent = text;
+}
+
+function renderQR(text) {
+  const box = $('#qr'); box.innerHTML = '';
+  if (!window.qrcode) { box.textContent = 'QR no disponible'; box.style.color = '#333'; return; }
+  const q = qrcode(0, 'M'); q.addData(text); q.make();
+  box.innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+}
+
+$('#btnCopy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('#linkOut').value); toast('Enlace copiado'); }
+  catch { $('#linkOut').select(); toast('Selecciona y copia el enlace'); }
+};
+$('#btnStop').onclick = stopHost;
+
+function stopHost() {
+  for (const id of [...calls.keys()]) {
+    const v = calls.get(id); try { v.conn.send({ t: 'ended' }); } catch {}
+  }
+  setTimeout(() => {
+    for (const id of [...calls.keys()]) dropViewer(id);
+    if (hostPeer) { hostPeer.destroy(); hostPeer = null; }
+  }, 250);
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  $('#preview').srcObject = null;
+  show($('#host'), false); show($('#home'));
+  netState('Listo', true);
+}
+
+/* ========================= ESPECTADOR ========================= */
+let viewPeer = null, viewConn = null, viewCall = null, statsTimer = null, wakeLock = null, ended = false, joinTimer = null;
+const remote = $('#remote');
+
+function deviceName() {
+  const ua = navigator.userAgent;
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Android/.test(ua)) return /Mobile/.test(ua) ? 'Android' : 'Tablet Android';
+  if (/Windows/.test(ua)) return 'PC Windows';
+  if (/Mac/.test(ua)) return 'Mac';
+  return 'Dispositivo';
+}
+
+function startViewer(code) {
+  if (!/^\d{6}$/.test(code)) return;
+  if (!window.Peer) return toast('PeerJS no cargó', true);
+  ended = false;
+  show($('#home'), false); show($('#viewer'));
+  setWaiting('Buscando el código ' + code + '…');
+  requestWake();
+
+  viewPeer = new Peer(peerOpts());
+  viewPeer.on('open', () => {
+    netState('Conectado', true);
+    viewConn = viewPeer.connect(ID_PREFIX + code, { reliable: true, metadata: { name: deviceName() } });
+    viewConn.on('open', () => setWaiting('Conectado. Recibiendo imagen…'));
+    viewConn.on('data', d => {
+      if (d && d.t === 'ended') leaveViewer('El emisor ha dejado de compartir.');
+      if (d && d.t === 'kick') leaveViewer('El emisor te ha desconectado.');
+    });
+    viewConn.on('close', () => { if (!ended) leaveViewer('Conexión cerrada.'); });
+    clearTimeout(joinTimer);
+    joinTimer = setTimeout(() => { if (!remote.srcObject && !ended) setWaiting('Tardando más de lo normal… (si estáis en redes muy restrictivas hace falta un servidor TURN)'); }, 15000);
+  });
+
+  viewPeer.on('call', call => {
+    viewCall = call;
+    call.answer(); // sólo recibimos
+    const pc = call.peerConnection;
+    pc.addEventListener('track', ev => {
+      try { ev.receiver.jitterBufferTarget = 0; } catch {}
+      try { ev.receiver.playoutDelayHint = 0; } catch {}
+    });
+    call.on('stream', s => {
+      remote.srcObject = s;
+      remote.play().catch(() => {});
+      show($('#waiting'), false);
+      $('#btnAudio').disabled = s.getAudioTracks().length === 0;
+      startStats(pc);
+      clearTimeout(joinTimer);
+    });
+    pc.addEventListener('connectionstatechange', () => {
+      if (pc.connectionState === 'disconnected') setWaiting('Reconectando…', true);
+      if (pc.connectionState === 'connected') show($('#waiting'), false);
+      if (pc.connectionState === 'failed') leaveViewer('No se pudo establecer la conexión. Probablemente hace falta un servidor TURN.');
+    });
+    call.on('close', () => { if (!ended) leaveViewer('Transmisión finalizada.'); });
+  });
+
+  viewPeer.on('error', err => {
+    if (err.type === 'peer-unavailable') return leaveViewer('Código no válido o el emisor ya no está compartiendo.');
+    if (err.type === 'disconnected' || err.type === 'socket-closed') return;
+    console.warn(err);
+    if (!remote.srcObject) leaveViewer('Error de conexión: ' + (err.message || err.type));
+  });
+  viewPeer.on('disconnected', () => { if (!ended && viewPeer && !viewPeer.destroyed) viewPeer.reconnect(); });
+}
+
+function setWaiting(text, overlay) {
+  $('#waitText').textContent = text; show($('#waiting'));
+}
+
+function startStats(pc) {
+  clearInterval(statsTimer);
+  let lastBytes = 0, lastTs = 0, lastDecoded = 0, lastTotalDecode = 0;
+  statsTimer = setInterval(async () => {
+    if (pc.connectionState === 'closed') return clearInterval(statsTimer);
+    try {
+      const st = await pc.getStats();
+      let inb, pair, local, codec;
+      st.forEach(r => {
+        if (r.type === 'inbound-rtp' && r.kind === 'video') inb = r;
+        if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') pair = r;
+      });
+      if (!inb) return;
+      st.forEach(r => { if (pair && r.id === pair.localCandidateId) local = r; if (r.id === inb.codecId) codec = r; });
+      const kbps = lastTs ? ((inb.bytesReceived - lastBytes) * 8 / ((inb.timestamp - lastTs) / 1000) / 1000) : 0;
+      const dec = inb.framesDecoded - lastDecoded;
+      const decMs = dec > 0 ? ((inb.totalDecodeTime - lastTotalDecode) / dec * 1000) : 0;
+      lastBytes = inb.bytesReceived; lastTs = inb.timestamp; lastDecoded = inb.framesDecoded; lastTotalDecode = inb.totalDecodeTime || 0;
+      const rtt = pair && pair.currentRoundTripTime != null ? Math.round(pair.currentRoundTripTime * 1000) + ' ms' : '—';
+      const route = local ? (local.candidateType === 'relay' ? 'TURN' : 'P2P directo') : '—';
+      $('#stats').textContent =
+        `${inb.frameWidth || '?'}×${inb.frameHeight || '?'} @ ${Math.round(inb.framesPerSecond || 0)} fps\n` +
+        `${(kbps / 1000).toFixed(1)} Mbps · ${codec ? codec.mimeType.replace('video/', '') : '?'}\n` +
+        `RTT ${rtt} · decod. ${decMs.toFixed(1)} ms\n` +
+        `Perdidos ${inb.packetsLost || 0} · ${route}`;
+    } catch {}
+  }, 1000);
+}
+
+async function requestWake() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && viewPeer && !ended) requestWake(); });
+
+$('#btnAudio').onclick = () => {
+  remote.muted = !remote.muted;
+  $('#btnAudio').textContent = remote.muted ? '🔇' : '🔊';
+  remote.play().catch(() => {});
+};
+$('#btnStats').onclick = () => show($('#stats'), $('#stats').classList.contains('hidden'));
+$('#btnFs').onclick = toggleFs;
+remote.addEventListener('dblclick', toggleFs);
+$('#btnLeave').onclick = () => leaveViewer();
+
+async function toggleFs() {
+  const el = $('#viewer');
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else if (el.requestFullscreen || el.webkitRequestFullscreen) {
+      await (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' });
+      try {
+        const v = remote; if (v.videoWidth > v.videoHeight) await screen.orientation.lock('landscape');
+      } catch {}
+    } else if (remote.webkitEnterFullscreen) {
+      remote.webkitEnterFullscreen(); // iPhone
+    }
+  } catch {}
+}
+
+function leaveViewer(msg) {
+  if (ended) return; ended = true;
+  clearInterval(statsTimer); clearTimeout(joinTimer);
+  try { viewCall && viewCall.close(); } catch {}
+  try { viewConn && viewConn.close(); } catch {}
+  try { viewPeer && viewPeer.destroy(); } catch {}
+  viewPeer = viewConn = viewCall = null;
+  remote.srcObject = null;
+  try { wakeLock && wakeLock.release(); } catch {}
+  try { if (document.fullscreenElement) document.exitFullscreen(); } catch {}
+  show($('#viewer'), false); show($('#home'));
+  netState('Listo', true);
+  if (msg) toast(msg, true);
+  history.replaceState(null, '', location.pathname);
+}
+
+// Ocultar controles cuando no se toca
+let idleT;
+function poke() {
+  const v = $('#viewer'); v.classList.remove('idle');
+  clearTimeout(idleT); idleT = setTimeout(() => { if (remote.srcObject) v.classList.add('idle'); }, 3000);
+}
+['mousemove', 'touchstart', 'click', 'keydown'].forEach(e => $('#viewer').addEventListener(e, poke, { passive: true }));
+
+/* ---------------- Auto-unión por enlace ?c=123456 o #123456 ---------------- */
+(() => {
+  const q = new URLSearchParams(location.search).get('c') || location.hash.replace('#', '');
+  if (/^\d{6}$/.test(q)) { codeIn.value = q; $('#btnJoin').disabled = false; startViewer(q); }
+})();
+
+window.addEventListener('beforeunload', () => { try { hostPeer && hostPeer.destroy(); viewPeer && viewPeer.destroy(); } catch {} });
+</script>
+</body>
+</html>
