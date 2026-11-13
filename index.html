@@ -40,6 +40,7 @@
   .btn.primary{background:var(--accent);color:#06210f;border-color:transparent}
   .btn.danger{background:transparent;color:var(--danger);border-color:#4a2530}
   .btn.block{width:100%}
+  a.btn{text-decoration:none}
   .codein{font-size:30px!important;letter-spacing:12px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;width:100%;padding:14px!important}
   .note{font-size:13px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:14px}
   .note.warn{border-color:#5a4520;color:#f3c76b}
@@ -93,7 +94,7 @@
 <!-- ============ INICIO ============ -->
 <main id="home">
   <h1>Comparte tu pantalla con un código</h1>
-  <p class="sub">PC ↔ móvil, desde cualquier red. El vídeo viaja directo entre los dispositivos (P2P, cifrado).</p>
+  <p class="sub">Móvil → PC o PC → móvil, desde cualquier red. El vídeo viaja directo entre los dispositivos (P2P, cifrado).</p>
 
   <div class="grid">
     <section class="card">
@@ -117,7 +118,14 @@
         </label>
       </div>
       <button id="btnShare" class="btn primary block">Empezar a compartir</button>
-      <div id="noCapture" class="note warn hidden">Este navegador no permite capturar la pantalla (los navegadores de móvil no lo soportan). Úsalo para <b>ver</b> la pantalla de un PC.</div>
+      <div id="noCapture" class="note warn hidden">Los navegadores de móvil no permiten capturar la pantalla. Para compartir la pantalla de este móvil instala la app 👇</div>
+    </section>
+
+    <section class="card">
+      <h2>🤖 Compartir pantalla del móvil</h2>
+      <p>Instala la app en tu Android, pulsa «Empezar a compartir» y escribe aquí, en «Ver pantalla», el código que te dé.</p>
+      <a class="btn primary block" href="https://github.com/sicono/screenlink/releases/latest/download/ScreenLink.apk">Descargar app Android (APK)</a>
+      <div class="note">Android 7 o superior. Al instalar, permite «orígenes desconocidos» si te lo pide.</div>
     </section>
 
     <section class="card">
@@ -450,7 +458,7 @@ function startViewer(code) {
   viewPeer = new Peer(peerOpts());
   viewPeer.on('open', () => {
     netState('Conectado', true);
-    viewConn = viewPeer.connect(ID_PREFIX + code, { reliable: true, metadata: { name: deviceName() } });
+    viewConn = viewPeer.connect(ID_PREFIX + code, { reliable: true, serialization: 'json', metadata: { name: deviceName() } });
     viewConn.on('open', () => setWaiting('Conectado. Recibiendo imagen…'));
     viewConn.on('data', d => {
       if (d && d.t === 'ended') leaveViewer('El emisor ha dejado de compartir.');
