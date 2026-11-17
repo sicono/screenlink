@@ -30,6 +30,9 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
+import org.webrtc.CapturerObserver
+import org.webrtc.VideoFrame
+import android.os.Handler
 import java.nio.ByteBuffer
 import java.security.SecureRandom
 import java.util.concurrent.Executors
@@ -68,6 +71,7 @@ class ScreenHost(
     companion object {
         private const val TAG = "ScreenHost"
         const val ID_PREFIX = "screenlink-v1-"
+        private const val MIN_BITRATE = 1_200_000
         const val CONFIG_URL = "https://sicono.github.io/screenlink/config.json"
         val DEFAULT_ICE: List<PeerConnection.IceServer> = listOf(
             PeerConnection.IceServer.builder(listOf(
@@ -154,7 +158,10 @@ class ScreenHost(
         val cap = ScreenCapturerAndroid(projectionData, object : MediaProjection.Callback() {
             override fun onStop() { cb.onProjectionStopped() }
         })
-        cap.initialize(helper, ctx.applicationContext, source!!.capturerObserver)
+        // Repite el último fotograma cuando la pantalla está quieta: Android sólo emite
+        // fotogramas cuando algo cambia y el codificador nunca refinaría la imagen.
+        val repeater = RepeatingObserver(source!!.capturerObserver, helper!!.handler)
+        cap.initialize(helper, ctx.applicationContext, repeater)
         val (w, h) = captureSize()
         capW = w; capH = h
         cap.startCapture(w, h, q.fps)
@@ -328,7 +335,7 @@ class ScreenHost(
         val sdp = payload.optJSONObject("sdp")?.optString("sdp") ?: return
         pc.setRemoteDescription(object : SdpAdapter("media-remote") {
             override fun onSetSuccess() = post { flushPending(v, connId, pc) }
-        }, SessionDescription(SessionDescription.Type.ANSWER, sdp))
+        }, SessionDescription(SessionDescription.Type.ANSWER, mungeBitrate(sdp)))
     }
 
     private fun onCandidate(src: String, payload: JSONObject) {
@@ -403,18 +410,58 @@ class ScreenHost(
         })
     }
 
+    /**
+     * Añade x-google-start/min/max-bitrate a los códecs de vídeo de la respuesta remota
+     * para que el codificador arranque con buena calidad en vez de ~300 kbps.
+     */
+    private fun mungeBitrate(sdp: String): String {
+        val maxK = q.bitrate / 1000
+        val startK = maxOf(MIN_BITRATE / 1000, maxK / 2)
+        val minK = MIN_BITRATE / 1000
+        val extra = "x-google-start-bitrate=$startK;x-google-min-bitrate=$minK;x-google-max-bitrate=$maxK"
+        val lines = sdp.split("\r\n").toMutableList()
+        val videoPts = mutableSetOf<String>()
+        val withFmtp = mutableSetOf<String>()
+        var inVideo = false
+        for (l in lines) {
+            if (l.startsWith("m=")) inVideo = l.startsWith("m=video")
+            if (!inVideo) continue
+            if (l.startsWith("a=rtpmap:")) {
+                val pt = l.substringAfter("a=rtpmap:").substringBefore(' ')
+                val codec = l.substringAfter(' ').substringBefore('/').uppercase()
+                if (codec in setOf("H264", "VP8", "VP9", "AV1", "H265")) videoPts.add(pt)
+            } else if (l.startsWith("a=fmtp:")) {
+                withFmtp.add(l.substringAfter("a=fmtp:").substringBefore(' '))
+            }
+        }
+        val out = ArrayList<String>(lines.size + 8)
+        for (l in lines) {
+            if (l.startsWith("a=fmtp:")) {
+                val pt = l.substringAfter("a=fmtp:").substringBefore(' ')
+                out.add(if (pt in videoPts && !l.contains("x-google-")) "$l;$extra" else l)
+                continue
+            }
+            out.add(l)
+            if (l.startsWith("a=rtpmap:")) {
+                val pt = l.substringAfter("a=rtpmap:").substringBefore(' ')
+                if (pt in videoPts && pt !in withFmtp) out.add("a=fmtp:$pt $extra")
+            }
+        }
+        return out.joinToString("\r\n")
+    }
+
     private fun tuneSender(pc: PeerConnection) {
         for (s in pc.senders) {
             if (s.track()?.kind() != "video") continue
             try {
                 val p = s.parameters
-                p.degradationPreference = if (q.fps >= 60)
-                    RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
-                else
-                    RtpParameters.DegradationPreference.BALANCED
+                // Nunca bajar la resolución: en pantalla compartida se prefiere perder fps
+                p.degradationPreference = RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
                 for (e in p.encodings) {
                     e.maxBitrateBps = q.bitrate
+                    e.minBitrateBps = MIN_BITRATE
                     e.maxFramerate = q.fps
+                    e.scaleResolutionDownBy = 1.0
                 }
                 s.parameters = p
             } catch (e: Exception) {
@@ -470,6 +517,60 @@ class ScreenHost(
         try { egl?.release() } catch (_: Exception) {}
         capturer = null; track = null; source = null; helper = null; factory = null; egl = null
         rtc.shutdown()
+    }
+}
+
+/**
+ * Pasa los fotogramas al VideoSource convertidos a I420 y, si la pantalla lleva
+ * quieta [idleMs], reenvía el último para que el codificador vaya afinando la calidad.
+ */
+private class RepeatingObserver(
+    private val target: CapturerObserver,
+    private val handler: Handler,
+    private val idleMs: Long = 150,
+) : CapturerObserver {
+    private var last: VideoFrame.I420Buffer? = null
+    private var lastRotation = 0
+    private var lastNs = 0L
+    private var running = false
+
+    private val tick = object : Runnable {
+        override fun run() {
+            if (!running) return
+            val b = last
+            val now = System.nanoTime()
+            if (b != null && now - lastNs >= idleMs * 1_000_000L) {
+                b.retain()
+                val f = VideoFrame(b, lastRotation, now)
+                target.onFrameCaptured(f)
+                f.release()
+            }
+            handler.postDelayed(this, idleMs)
+        }
+    }
+
+    override fun onCapturerStarted(success: Boolean) {
+        target.onCapturerStarted(success)
+        running = success
+        handler.removeCallbacks(tick)
+        if (success) handler.postDelayed(tick, idleMs)
+    }
+
+    override fun onCapturerStopped() {
+        running = false
+        handler.removeCallbacks(tick)
+        last?.release(); last = null
+        target.onCapturerStopped()
+    }
+
+    override fun onFrameCaptured(frame: VideoFrame) {
+        val i420 = frame.buffer.toI420() ?: return
+        val f = VideoFrame(i420, frame.rotation, frame.timestampNs)
+        target.onFrameCaptured(f)
+        last?.release()
+        last = i420            // nos quedamos con la referencia de toI420()
+        lastRotation = frame.rotation
+        lastNs = System.nanoTime()
     }
 }
 

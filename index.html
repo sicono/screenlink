@@ -260,7 +260,7 @@ let hostPeer = null, stream = null, hostCode = null;
 const calls = new Map(); // peerId -> { call, conn, li, name }
 
 const PROFILES = {
-  motion:   { fps: 60, hint: 'motion', degr: 'maintain-framerate', mult: 1.4 },
+  motion:   { fps: 60, hint: 'motion', degr: 'balanced', mult: 1.4 },
   balanced: { fps: 60, hint: 'motion', degr: 'balanced',           mult: 1.0 },
   detail:   { fps: 30, hint: 'detail', degr: 'maintain-resolution', mult: 1.0 },
 };
