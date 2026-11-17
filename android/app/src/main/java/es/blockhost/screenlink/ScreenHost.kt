@@ -24,7 +24,6 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpParameters
 import org.webrtc.RtpReceiver
 import org.webrtc.RtpTransceiver
-import org.webrtc.ScreenCapturerAndroid
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
@@ -116,7 +115,7 @@ class ScreenHost(
 
     private var egl: EglBase? = null
     private var factory: PeerConnectionFactory? = null
-    private var capturer: ScreenCapturerAndroid? = null
+    private var capturer: RotatingScreenCapturer? = null
     private var helper: SurfaceTextureHelper? = null
     private var source: VideoSource? = null
     private var track: VideoTrack? = null
@@ -155,7 +154,7 @@ class ScreenHost(
         val f = factory!!
         helper = SurfaceTextureHelper.create("ScreenCapture", eglBase.eglBaseContext)
         source = f.createVideoSource(true)
-        val cap = ScreenCapturerAndroid(projectionData, object : MediaProjection.Callback() {
+        val cap = RotatingScreenCapturer(projectionData, object : MediaProjection.Callback() {
             override fun onStop() { cb.onProjectionStopped() }
         })
         // Repite el último fotograma cuando la pantalla está quieta: Android sólo emite
