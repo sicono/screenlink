@@ -1,6 +1,16 @@
 {
   "iceServers": [
-    { "urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478"] }
+    { "urls": ["stun:stun.relay.metered.ca:80", "stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
+    {
+      "urls": [
+        "turn:global.relay.metered.ca:80",
+        "turn:global.relay.metered.ca:80?transport=tcp",
+        "turn:global.relay.metered.ca:443",
+        "turns:global.relay.metered.ca:443?transport=tcp"
+      ],
+      "username": "0d7bf771cc48321ac4ba0bb7",
+      "credential": "0PlzwZjVWaC7Gbt4"
+    }
   ],
-  "turnCredentialsUrl": "https://screenlink123456.metered.live/api/v1/turn/credentials?apiKey=ffac5a78d9cad28be0dc7e0afdd82f63d484"
+  "turnCredentialsUrl": ""
 }
