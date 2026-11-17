@@ -203,6 +203,27 @@ const ICE = {
   sdpSemantics: 'unified-plan',
 };
 
+// Servidores ICE (STUN/TURN) desde config.json: se cambian sin tocar la web ni la app
+// - iceServers: lista fija (STUN y/o TURN propio, p. ej. coturn en tu VPS)
+// - turnCredentialsUrl: URL que devuelve un array de iceServers (Metered / Open Relay)
+const cfgReady = (async () => {
+  try {
+    const r = await fetch('config.json', { cache: 'no-store' });
+    if (!r.ok) return;
+    const c = await r.json();
+    const list = Array.isArray(c.iceServers) && c.iceServers.length ? [...c.iceServers] : [...ICE.iceServers];
+    if (c.turnCredentialsUrl) {
+      try {
+        const t = await fetch(c.turnCredentialsUrl, { cache: 'no-store' });
+        const extra = await t.json();
+        if (Array.isArray(extra)) list.push(...extra);
+        else if (extra && Array.isArray(extra.iceServers)) list.push(...extra.iceServers);
+      } catch (e) { console.warn('TURN credentials', e); }
+    }
+    ICE.iceServers = list;
+  } catch (e) { console.warn('config.json', e); }
+})();
+
 /* ========================================================================== */
 const $ = s => document.querySelector(s);
 const show = (el, v = true) => el.classList.toggle('hidden', !v);
@@ -278,6 +299,7 @@ async function startHost() {
   show($('#home'), false); show($('#host'));
   $('#codeOut').textContent = '······';
   setHostState('Registrando…', false);
+  await cfgReady;
   createHostPeer(0);
 }
 
@@ -447,13 +469,15 @@ function deviceName() {
   return 'Dispositivo';
 }
 
-function startViewer(code) {
+async function startViewer(code) {
   if (!/^\d{6}$/.test(code)) return;
   if (!window.Peer) return toast('PeerJS no cargó', true);
   ended = false;
   show($('#home'), false); show($('#viewer'));
   setWaiting('Buscando el código ' + code + '…');
   requestWake();
+  await cfgReady;
+  if (ended) return;
 
   viewPeer = new Peer(peerOpts());
   viewPeer.on('open', () => {

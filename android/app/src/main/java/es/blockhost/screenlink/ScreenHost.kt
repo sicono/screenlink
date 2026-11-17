@@ -7,6 +7,9 @@ import android.media.projection.MediaProjection
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
@@ -65,16 +68,33 @@ class ScreenHost(
     companion object {
         private const val TAG = "ScreenHost"
         const val ID_PREFIX = "screenlink-v1-"
-        val ICE_SERVERS: List<PeerConnection.IceServer> = listOf(
+        const val CONFIG_URL = "https://sicono.github.io/screenlink/config.json"
+        val DEFAULT_ICE: List<PeerConnection.IceServer> = listOf(
             PeerConnection.IceServer.builder(listOf(
                 "stun:stun.l.google.com:19302",
                 "stun:stun1.l.google.com:19302",
                 "stun:stun.cloudflare.com:3478",
             )).createIceServer(),
-            // TURN propio (recomendado para redes móviles con CGNAT):
-            // PeerConnection.IceServer.builder(listOf("turn:turn.blockhost.es:3478?transport=udp", "turn:turn.blockhost.es:3478?transport=tcp"))
-            //     .setUsername("screenlink").setPassword("CAMBIA_ESTA_PASS").createIceServer(),
         )
+
+        private fun parseIce(arr: JSONArray?): List<PeerConnection.IceServer> {
+            if (arr == null) return emptyList()
+            val out = mutableListOf<PeerConnection.IceServer>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val urls = mutableListOf<String>()
+                when (val u = o.opt("urls") ?: o.opt("url")) {
+                    is String -> urls.add(u)
+                    is JSONArray -> for (j in 0 until u.length()) urls.add(u.optString(j))
+                }
+                if (urls.isEmpty()) continue
+                val b = PeerConnection.IceServer.builder(urls)
+                o.optString("username").takeIf { it.isNotEmpty() }?.let { b.setUsername(it) }
+                o.optString("credential").takeIf { it.isNotEmpty() }?.let { b.setPassword(it) }
+                out.add(b.createIceServer())
+            }
+            return out
+        }
     }
 
     private class Viewer(val peerId: String, val name: String) {
@@ -100,6 +120,7 @@ class ScreenHost(
     private val viewers = HashMap<String, Viewer>()
     private var code = ""
     private var stopped = false
+    private var iceServers: List<PeerConnection.IceServer> = DEFAULT_ICE
     private var capW = 0
     private var capH = 0
 
@@ -142,6 +163,7 @@ class ScreenHost(
         track?.setEnabled(true)
 
         cb.onStatus("Conectando con el servidor…")
+        iceServers = loadIceServers()
         openSignaling(newCode = true)
     }
 
@@ -157,6 +179,32 @@ class ScreenHost(
         val scale = minOf(1.0, q.maxLong.toDouble() / long)
         fun even(v: Double) = (v.toInt() / 2) * 2
         return even(w * scale) to even(h * scale)
+    }
+
+    /** Lee config.json (el mismo que usa la web) y, si hay, las credenciales TURN. */
+    private fun loadIceServers(): List<PeerConnection.IceServer> {
+        val http = OkHttpClient.Builder().callTimeout(6, TimeUnit.SECONDS).build()
+        fun get(url: String): String? = try {
+            http.newCall(Request.Builder().url(url).header("Cache-Control", "no-cache").build()).execute()
+                .use { if (it.isSuccessful) it.body?.string() else null }
+        } catch (e: Exception) { Log.w(TAG, "GET $url", e); null }
+
+        val cfgText = get(CONFIG_URL + "?t=" + System.currentTimeMillis()) ?: return DEFAULT_ICE
+        return try {
+            val cfg = JSONObject(cfgText)
+            val list = parseIce(cfg.optJSONArray("iceServers")).ifEmpty { DEFAULT_ICE }.toMutableList()
+            val turnUrl = cfg.optString("turnCredentialsUrl")
+            if (turnUrl.isNotEmpty()) {
+                get(turnUrl)?.trim()?.let { t ->
+                    val arr = if (t.startsWith("[")) JSONArray(t) else JSONObject(t).optJSONArray("iceServers")
+                    list.addAll(parseIce(arr))
+                }
+            }
+            Log.i(TAG, "ICE servers: ${list.size}")
+            list
+        } catch (e: Exception) {
+            Log.w(TAG, "config.json inválido", e); DEFAULT_ICE
+        }
     }
 
     fun onRotation() = post {
@@ -307,7 +355,7 @@ class ScreenHost(
     }
 
     private fun createPc(v: Viewer, connId: String, kind: String): PeerConnection? {
-        val cfg = PeerConnection.RTCConfiguration(ICE_SERVERS).apply {
+        val cfg = PeerConnection.RTCConfiguration(iceServers).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
             bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
