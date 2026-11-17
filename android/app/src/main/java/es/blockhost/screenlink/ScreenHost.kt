@@ -160,7 +160,7 @@ class ScreenHost(
         // Repite el último fotograma cuando la pantalla está quieta: Android sólo emite
         // fotogramas cuando algo cambia y el codificador nunca refinaría la imagen.
         val repeater = RepeatingObserver(source!!.capturerObserver, helper!!.handler)
-        cap.initialize(helper, ctx.applicationContext, repeater)
+        cap.initialize(helper!!, ctx.applicationContext, repeater)
         val (w, h) = captureSize()
         capW = w; capH = h
         cap.startCapture(w, h, q.fps)
